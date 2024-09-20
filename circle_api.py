@@ -27,8 +27,9 @@ def create_wallet(nr_wallets: int, blockchain: str = 'MATIC-AMOY') -> list[devel
         })
         api_instance.create_wallet(request) # TODO does not actually return wallets as it's supposed to
 
-        return api_instance.get_wallets(page_size=nr_wallets)
+        return [wallet.actual_instance for wallet in api_instance.get_wallets(page_size=nr_wallets).data.wallets]
 
     except developer_controlled_wallets.ApiException as e:
         print(f"Exception when calling WalletsApi->create_wallet: {e}")
-        return None
+        return []
+
