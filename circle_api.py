@@ -1,8 +1,10 @@
+import uuid
 import dotenv
 import os
 
 from circle.web3 import developer_controlled_wallets
 from circle.web3 import utils as circle_utils
+import requests
 
 dotenv.load_dotenv()
 
@@ -47,3 +49,33 @@ def update_wallets(wallet_id: str, wallet_name: str, wallet_ref_id: str) -> bool
     except developer_controlled_wallets.ApiException as e:
         print(f"Exception when calling WalletsApi->update_wallet: {e}")
         return False
+
+def get_wallet_balance(wallet_id: str):
+    url = f"https://api.circle.com/v1/w3s/wallets/{wallet_id}/balances"
+    headers = {
+        "accept": "application/json",
+        "Authorization": f"Bearer {CIRCLE_API_KEY}"
+    }
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+def send_transfer(wallet_id: str, recipient: str, token: str, amount: str):
+    url = "https://api.circle.com/v1/w3s/developer/transactions/transfer"
+
+    payload = {
+        "walletId": wallet_id,
+        "destinationAddress": recipient,
+        "tokenAddress": token,
+        "amounts": [amount],
+        "idempotencyKey": str(uuid.uuid4()), # TODO create a uuid from the user request so that it can only be sent once
+        "entitySecretCiphertext": client.generate_entity_secret_ciphertext(),
+        "feeLevel": "MEDIUM"
+    }
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "authorization": f"Bearer {CIRCLE_API_KEY}"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
