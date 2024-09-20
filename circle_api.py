@@ -79,3 +79,28 @@ def send_transfer(wallet_id: str, recipient: str, token: str, amount: str):
     
     response = requests.post(url, json=payload, headers=headers)
     return response.json()
+
+def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_signature: str, abi_parameters: list, amount: float | None = None):
+    url = "https://api.circle.com/v1/w3s/developer/transactions/contractExecution"
+
+    payload = {
+        "walletId": wallet_id,
+        "contractAddress": contract_address,
+        "abiFunctionSignature": abi_function_signature,
+        "abiParameters": abi_parameters,
+        "idempotencyKey": str(uuid.uuid4()),
+        "entitySecretCiphertext": client.generate_entity_secret_ciphertext(),
+        "feeLevel": "MEDIUM"
+    }
+
+    if amount is not None:
+        payload["amount"] = str(amount * 1e18) # assuming 18 decimals for the token
+
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "authorization": f"Bearer {CIRCLE_API_KEY}"
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
