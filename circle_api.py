@@ -33,3 +33,17 @@ def create_wallet(nr_wallets: int, blockchain: str = 'MATIC-AMOY') -> list[devel
         print(f"Exception when calling WalletsApi->create_wallet: {e}")
         return []
 
+def update_wallets(wallet_id: str, wallet_name: str, wallet_ref_id: str) -> bool:
+    api_instance = developer_controlled_wallets.WalletsApi(client)
+    
+    try:
+        request = developer_controlled_wallets.UpdateWalletRequest(
+                name=wallet_name,
+                ref_id=wallet_ref_id
+            )
+        api_instance.update_wallet(wallet_id, request)
+        print(f"Updated wallet {wallet_id} with name: {wallet_name} and ref_id: {wallet_ref_id}")
+        return True
+    except developer_controlled_wallets.ApiException as e:
+        print(f"Exception when calling WalletsApi->update_wallet: {e}")
+        return False
