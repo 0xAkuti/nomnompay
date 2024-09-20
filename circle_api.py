@@ -1,4 +1,5 @@
 import uuid
+import enum
 import dotenv
 import os
 
@@ -12,9 +13,17 @@ CIRCLE_API_KEY = os.getenv("CIRCLE_API_KEY")
 ENTITY_SECRET = os.getenv("ENTITY_SECRET")
 WALLET_SET_ID = os.getenv("WALLET_SET_ID")
 
+class Blockchain(str, enum.Enum):
+    ETH = "ETH"
+    ETH_SEPOLIA = "ETH-SEPOLIA"
+    ARB = "ARB"
+    ARB_SEPOLIA = "ARB-SEPOLIA"
+    MATIC = "MATIC"
+    MATIC_AMOY = "MATIC-AMOY"
+
 client = circle_utils.init_developer_controlled_wallets_client(api_key=CIRCLE_API_KEY, entity_secret=ENTITY_SECRET)
 
-def create_wallet(nr_wallets: int, blockchain: str = 'MATIC-AMOY') -> list[developer_controlled_wallets.SCAWallet]:
+def create_wallet(nr_wallets: int, blockchain: Blockchain = Blockchain.MATIC_AMOY) -> list[developer_controlled_wallets.SCAWallet]:
     api_instance = developer_controlled_wallets.WalletsApi(client)
 
     if nr_wallets > 20:
@@ -23,7 +32,7 @@ def create_wallet(nr_wallets: int, blockchain: str = 'MATIC-AMOY') -> list[devel
     try:
         request = developer_controlled_wallets.CreateWalletRequest.from_dict({
             "accountType": 'SCA',
-            "blockchains": [blockchain],
+            "blockchains": [blockchain.value],
             "count": nr_wallets,
             "walletSetId": WALLET_SET_ID
         })
