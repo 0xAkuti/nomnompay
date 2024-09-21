@@ -62,14 +62,14 @@ def get_wallet_balance(wallet_id: str):
     response = requests.get(url, headers=headers)
     return response.json()
 
-def send_transfer(wallet_id: str, recipient: str, token: str, amount: str):
+def send_transfer(wallet_id: str, recipient: str, tokenId: str, amount: float):
     url = "https://api.circle.com/v1/w3s/developer/transactions/transfer"
 
     payload = {
         "walletId": wallet_id,
         "destinationAddress": recipient,
-        "tokenAddress": token,
-        "amounts": [amount],
+        "tokenId": tokenId,
+        "amounts": [str(amount)],
         "idempotencyKey": str(uuid.uuid4()), # TODO create a uuid from the user request so that it can only be sent once
         "entitySecretCiphertext": client.generate_entity_secret_ciphertext(),
         "feeLevel": "MEDIUM"
@@ -81,7 +81,17 @@ def send_transfer(wallet_id: str, recipient: str, token: str, amount: str):
     }
     
     response = requests.post(url, json=payload, headers=headers)
+    print(response.json())
     return response.json()
+
+def get_transaction(transaction_id: str):
+    url = f"https://api.circle.com/v1/w3s/transactions/{transaction_id}"
+    headers = {
+        "accept": "application/json",
+        "Authorization": f"Bearer {CIRCLE_API_KEY}"
+    }
+    response = requests.get(url, headers=headers)
+    return response.json()["data"]["transaction"]
 
 def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_signature: str, abi_parameters: list, amount: float | None = None):
     url = "https://api.circle.com/v1/w3s/developer/transactions/contractExecution"
@@ -97,7 +107,7 @@ def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_s
     }
 
     if amount is not None:
-        payload["amount"] = str(amount * 1e18) # assuming 18 decimals for the token
+        payload["amount"] = str(amount * 1e18) # 18 decimals for ETH
 
     headers = {
         "accept": "application/json",

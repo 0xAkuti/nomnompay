@@ -48,6 +48,17 @@ class User(StoreableBaseModel):
         except FileNotFoundError:
             return None
     
+    @classmethod
+    def load_by_username(cls, username: str) -> 'User | None':
+        if username.startswith('@'):
+            username = username[1:]
+        # TODO improve this to not load all files
+        for path in pathlib.Path('data/users').glob('*.json'):
+            user = cls.load(str(path))
+            if user.username == username:
+                return user
+        return None
+
     def pretty_print_blockchain(self):
         if self.wallet.blockchain.value == 'ETH':
             return 'Ethereum'
