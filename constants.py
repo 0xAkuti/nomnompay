@@ -18,7 +18,7 @@ USDC_TOKEN_ADDRESSES = {
 
 USDC_TOKEN_IDS = {
     "ETH-SEPOLIA": '',
-    "ARB-SEPOLIA": '',
+    "ARB-SEPOLIA": '4b8daacc-5f47-5909-a3ba-30d171ebad98',
     "MATIC-AMOY": '36b6931a-873a-56a8-8a27-b706b17104ee',
     "ETH": '',
     "ARB": '',
