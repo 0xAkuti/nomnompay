@@ -110,9 +110,6 @@ def get_unregistered_wallet(blockchain: defs.Blockchain) -> defs.Wallet | None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat is None or update.effective_user is None:
         logging.error(f"Invalid update object, missing effective chat or user: {update}")
-        return    
-    if update.message is None:
-        logging.error(f"Invalid update object, missing message: {update}")
         return
     
     user_id = update.effective_user.id
@@ -165,7 +162,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             type_text = 'cancel'
         else:
             return
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"@{update.effective_user.username}, you are not allowed to {type_text} this transaction. Only @{CALLBACK_DATA.data[callback_key].username} can {type_text} this transaction.")
+        allowed_user = defs.User.load_by_id(CALLBACK_DATA.data[callback_key].telegram_id)
+        if allowed_user:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"@{update.effective_user.username}, you are not allowed to {type_text} this transaction. Only @{allowed_user.username} can {type_text} this transaction.")
+        else:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"@{update.effective_user.username}, you are not allowed to {type_text} this transaction.")
         return
 
     if command == 'confirm_send':
@@ -181,9 +182,6 @@ async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     if update.callback_query is None:
         logging.error(f"Invalid update object, missing callback query: {update}")
-        return
-    if update.message is None:
-        logging.error(f"Invalid update object, missing message: {update}")
         return
     
     if pathlib.Path(f'data/users/{update.effective_user.id}.json').exists():
@@ -334,8 +332,11 @@ async def internal_send_money(update: Update, context: ContextTypes.DEFAULT_TYPE
     users_without_wallet = []
     for transaction in transactions:
         # TODO check also wallet address and ens, not only telegram username
-        if not defs.User.load_by_username(transaction.recipient):
+        if transaction.recipient_type == defs.RecipientType.USERNAME and not defs.User.load_by_username(transaction.recipient):
             users_without_wallet.append(transaction.recipient)
+        elif transaction.recipient_type == defs.RecipientType.ENS and not get_ens_address(transaction.recipient):
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"ENS name {transaction.recipient} does not exist.")
+            return
     
     if len(users_without_wallet) > 0:
         if len(users_without_wallet) == 1:
@@ -378,7 +379,15 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
 
     transaction_ids = []
     for transaction in transactions:
-        recipient_address = defs.User.load_by_username(transaction.recipient).wallet.address
+        if transaction.recipient_type == defs.RecipientType.USERNAME:
+            recipient_address = defs.User.load_by_username(transaction.recipient).wallet.address
+        elif transaction.recipient_type == defs.RecipientType.ENS:
+            recipient_address = get_ens_address(transaction.recipient)
+            if recipient_address is None:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"ENS name {transaction.recipient} does not exist.")
+                continue
+        else:
+            recipient_address = transaction.recipient
         internal_transaction_id = str(uuid.uuid4())
         response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], transaction.get_amount_usd(USD_EXCHANGE_RATES), internal_transaction_id)
         transaction_ids.append(response['data']['id'])
@@ -418,7 +427,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_chat.send_action(telegram.constants.ChatAction.TYPING)
 
     bot_command = txt2command.parse_message(update.message.text or "")
-    print(bot_command.json(indent=4))
+    print(bot_command.model_dump_json(indent=4))
 
     match bot_command.type:
         case defs.CommandType.TRANSFER_MONEY:
