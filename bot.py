@@ -64,6 +64,13 @@ def get_unregistered_wallet(blockchain: defs.Blockchain) -> defs.Wallet | None:
 # commands and handlers
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return    
+    if update.message is None:
+        logging.error(f"Invalid update object, missing message: {update}")
+        return
+    
     user_id = update.effective_user.id
     
     user = defs.User.load_by_id(user_id)
@@ -83,10 +90,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=user_id, text=f"Welcome {update.effective_user.first_name}! Select a network to initialize your wallet.", reply_markup=reply_markup)
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    if update.callback_query is None:
+        logging.error(f"Invalid update object, missing callback query: {update}")
+        return
 
-    split_command = query.data.split(':')
+    await update.callback_query.answer()
+
+    split_command = update.callback_query.data.split(':')
     if len(split_command) != 2:
         return
 
@@ -98,6 +108,16 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # queries
 
 async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
+    if update.callback_query is None:
+        logging.error(f"Invalid update object, missing callback query: {update}")
+        return
+    if update.message is None:
+        logging.error(f"Invalid update object, missing message: {update}")
+        return
+    
     if pathlib.Path(f'data/users/{update.effective_user.id}.json').exists():
         await update.message.reply_text(f"Welcome back {update.effective_user.first_name}! You already have a wallet.")
         return
@@ -111,7 +131,7 @@ async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
         # TODO batch generate new wallets if none is available
         return
     
-    user = defs.User(telegram_id=update.effective_user.id, username=update.effective_user.username, wallet=wallet)
+    user = defs.User(telegram_id=update.effective_user.id, username=update.effective_user.username or "", wallet=wallet)
     circle_api.update_wallet(wallet.id, user.username, str(user.telegram_id))
     # TODO fech wallet after update
     
