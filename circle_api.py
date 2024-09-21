@@ -149,3 +149,63 @@ def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_s
 
     response = requests.post(url, json=payload, headers=headers)
     return response.json()
+
+def encode_address(address: str) -> str:
+    address = address.lower().removeprefix('0x')
+    if len(address) != 40:
+        raise ValueError("Invalid Ethereum address length")
+    address_bytes = bytes.fromhex(address)
+    return '0x' + (b'\x00' * 12 + address_bytes).hex()
+
+def cttp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float):
+    amount_str = str(round(amount * 1e6))
+    chain = user.wallet.blockchain.value
+    print(chain)
+    response1 = execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CTTP_TOKEN_MESSENGER[chain], amount_str])
+    
+    abi_function_signature = "depositForBurn(uint256,uint32,bytes32,address)"
+    encoded_destination_address = encode_address(destination_address)    
+    abi_parameters = [amount_str, CCTP_DOMAINS[destination_chain.value], encoded_destination_address, USDC_TOKEN_ADDRESSES[chain]]    
+    response2 = execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters)
+    
+    return response1, response2
+
+def get_message_bytes_and_hash(blockchain: defs.Blockchain, tx_hash: str) -> tuple[str, str]:
+    provider = web3.Web3(web3.HTTPProvider(INFURA_ENPOINTS[blockchain.value]))
+    # Get the transaction receipt
+    transaction_receipt = provider.eth.get_transaction_receipt(tx_hash)
+
+    # Create the event topic
+    event_topic = web3.Web3.keccak(text='MessageSent(bytes)').hex()
+
+    # Find the log with the matching topic
+    log = next((l for l in transaction_receipt['logs'] if l['topics'][0].hex() == event_topic), None)
+
+    if log is None:
+        raise ValueError("MessageSent event not found in transaction logs")
+
+    # Decode the log data
+    message_bytes = decode(['bytes'], log['data'])[0]
+
+    # Calculate the message hash
+    message_hash = web3.Web3.keccak(message_bytes).hex()
+
+    return f'0x{message_bytes.hex()}', f'0x{message_hash}'
+
+def get_atttestation(message_hash: str) -> str | None:
+    url = f"https://iris-api-sandbox.circle.com/v1/attestations/{message_hash}"
+
+    headers = {"accept": "application/json"}
+
+    response = requests.get(url, headers=headers).json()
+    if response['status'] != 'complete':
+        return None
+    return response['attestation']
+
+def cttp_mint(source_chain: defs.Blockchain, destination_walled_id: str, destination_chain: defs.Blockchain, tx_hash: str):
+    contract_address = CTTP_MESSAGE_TRANSMITTER[destination_chain.value]
+    message_bytes, message_hash = get_message_bytes_and_hash(source_chain, tx_hash)
+    attestation = get_atttestation(message_hash)
+    abi_function_signature = "receiveMessage(bytes,bytes)"
+    abi_parameters = [message_bytes, attestation]
+    return execute_smart_contract(destination_walled_id, contract_address, abi_function_signature, abi_parameters)
