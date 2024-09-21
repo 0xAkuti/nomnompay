@@ -1,25 +1,23 @@
+from datetime import datetime
 import json
 from typing import List, Optional, Type, TypeVar
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictStr
 from enum import Enum
 
 import requests
 import pathlib
-import circle.web3.developer_controlled_wallets
 
-Wallet = circle.web3.developer_controlled_wallets.SCAWallet
 
 T = TypeVar('T', bound=BaseModel)
 DECIMALS = 6
 
 def load_json_as_model(path: str, model: Type[T]) -> T:
     with open(path, 'r') as file:
-        data = json.load(file)
-    return model.parse_obj(data)
+        return model.model_validate_json(file.read())
 
 def store_json_as_model(path: str, model: BaseModel):
     with open(path, 'w') as file:
-        file.write(model.json())
+        file.write(model.model_dump_json())
 
 class StoreableBaseModel(BaseModel):
     def save(self, path: str):
@@ -87,6 +85,37 @@ class BotCommand(BaseModel):
     type: CommandType = Field(..., description="The type of bot command")
     transactions: Optional[List[Transaction]] = Field(None, description="List of transactions (only for transfer_money type)")
 
+class CustodyType(str, Enum):
+    DEVELOPER = 'DEVELOPER'
+    ENDUSER = 'ENDUSER'
+
+class WalletState(str, Enum):
+    LIVE = 'LIVE'
+    FROZEN = 'FROZEN'
+
+class Wallet(BaseModel):
+    id: StrictStr = Field(..., description="System-generated unique identifier of the resource.")
+    address: StrictStr = Field(..., description="Blockchain address of the wallet.")
+    blockchain: Blockchain = Field(...)
+    create_date: datetime = Field(..., alias="createDate", description="Date and time the resource was created, in ISO-8601 UTC format.")
+    update_date: datetime = Field(..., alias="updateDate", description="Date and time the resource was last updated, in ISO-8601 UTC format.")
+    custody_type: CustodyType = Field(..., alias="custodyType")
+    name: Optional[StrictStr] = Field(None, description="Optional name or description associated with the wallet.")
+    ref_id: Optional[StrictStr] = Field(None, alias="refId", description="Reference or description used to identify the object.")
+    state: WalletState = Field(...)
+    user_id: Optional[StrictStr] = Field(None, alias="userId", description="Unique system generated identifier for the user.")
+    wallet_set_id: StrictStr = Field(..., alias="walletSetId", description="System-generated unique identifier of the resource.")
+    account_type: StrictStr = Field(..., alias="accountType", description="An account can be a Smart Contract Account (SCA) or an Externally Owned Account (EOA). To learn more, see the [account types guide](https://developers.circle.com/w3s/docs/programmable-wallets-account-types).  If an account type is not specified during the creation of a wallet, it defaults to `EOA` (Externally Owned Account). Note that Solana doesn't support Smart Contract Account (SCA). ")
+    sca_core: StrictStr = Field(..., alias="scaCore", description="SCAs can have different versions that have different functionality. SCACore will display the version of the SCA being created. Please refer to developer docs for a list of the versions supported.")
+    __properties = ["id", "address", "blockchain", "createDate", "updateDate", "custodyType", "name", "refId", "state", "userId", "walletSetId", "accountType", "scaCore"]
+
+    class Config:
+        alias_generator = lambda string: ''.join(word.capitalize() for word in string.split('_'))
+        populate_by_name = True
+
+class Wallets(StoreableBaseModel):
+    wallets: List[Wallet] = Field(..., description="The list of wallets")
+
 class User(StoreableBaseModel):
     telegram_id: int = Field(..., description="The user's telegram ID")
     username: str = Field(..., description="The user's telegram username")
@@ -145,9 +174,6 @@ class User(StoreableBaseModel):
             return 'Solana Devnet'
         else:
             return self.wallet.blockchain.value
-
-class Wallets(StoreableBaseModel):
-    wallets: List[Wallet] = Field(..., description="The list of wallets")
 
 class TransferType(str, Enum):
     SINGLE_CHAIN = "SINGLE-CHAIN"
