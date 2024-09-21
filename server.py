@@ -38,7 +38,7 @@ async def handle_circle_webhook(data):
 
 async def handle_inbound_transaction(notification):
     print('Received INBOUND transaction')
-    if notification['state'] == 'CONFIRMED':
+    if notification['state'] == 'CONFIRMED' and notification['tokenId'] == USDC_TOKEN_IDS[notification['blockchain']]:
         wallet_id = notification['walletId']
         amount = float(notification['amounts'][0])
         user = defs.User.load_by_wallet_id(wallet_id)
