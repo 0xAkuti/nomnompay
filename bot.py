@@ -16,6 +16,7 @@ import requests
 import txt2command
 import server
 import threading
+from constants import *
 
 from utils import format_amount, get_ens_address
 
@@ -27,34 +28,6 @@ logging.basicConfig(
 )
 
 USD_EXCHANGE_RATES = requests.get('https://open.er-api.com/v6/latest/USD').json()['rates']
-USDC_TOKEN_ADDRESSES = {
-    # https://developers.circle.com/stablecoins/docs/usdc-on-test-networks
-    "ETH-SEPOLIA": '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-    "ARB-SEPOLIA": '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
-    "MATIC-AMOY": '0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582',
-    # https://developers.circle.com/stablecoins/docs/usdc-on-main-networks
-    "ETH": '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-    "ARB": '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-    "MATIC": '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
-}
-
-USDC_TOKEN_IDS = {
-    "ETH-SEPOLIA": '',
-    "ARB-SEPOLIA": '',
-    "MATIC-AMOY": '36b6931a-873a-56a8-8a27-b706b17104ee',
-    "ETH": '',
-    "ARB": '',
-    "MATIC": '',
-}
-
-CHAIN_IDS = {
-    "ETH-SEPOLIA": 11155111,
-    "ARB-SEPOLIA": 421614,
-    "MATIC-AMOY": 80002,
-    "ETH": 1,
-    "ARB": 42161,
-    "MATIC": 137,
-}
 
 def compose_transfer_money_message(transactions: list[defs.Transaction]):
     if len(transactions) == 0:

@@ -5,6 +5,7 @@ import json
 import asyncio
 import definitions as defs
 import requests
+from constants import *
 
 app = Flask(__name__)
 bot_application: Application = None  # This will be set when the bot starts

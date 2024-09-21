@@ -8,6 +8,7 @@ from circle.web3 import utils as circle_utils
 import requests
 
 import definitions as defs
+from constants import *
 
 dotenv.load_dotenv()
 
