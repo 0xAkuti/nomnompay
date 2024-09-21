@@ -285,7 +285,18 @@ async def show_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"You currently have <b>{format_amount(usdc_balance)} USDC</b> in your wallet.",
         parse_mode=telegram.constants.ParseMode.HTML
     )
-    
+
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="""This bot makes easy payment to other users in USDC. 
+
+Payment to individuals:
+You can chat to the bot to send USDC to someone using only their telegram handle, e.g. Transfer 10 dollars to @alice. Pay 30k IDR to @bob. Sende @carl 15€. 
+This bot supports currency conversions, all major languages and responds in English. 
+
+Payment within a group:
+To use the payment bot in a group, create your telegram group and add NomNomPaybot as admin. Text recipient's telegram handle to send payment e.g. "pay my roomie @bob $12". You can also split a bill by asking the bot to "split 150k vnd between @alice, @bob and @charlotte". Don't forget to try our Nouns sticker pack to add a splash of fun, e.g. type an emoji like 🍕 or 🚕to show the Nouns stickers
+""")
+
 async def send_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat is None or update.effective_user is None:
         logging.error(f"Invalid update object, missing effective chat or user: {update}")
@@ -448,7 +459,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         case defs.CommandType.UNKNOWN_COMMAND:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="I'm sorry, I didn't understand that command. Can you please try again?"
+                text="I'm sorry, I didn't understand that command. Can you please try again? Or check /help for more information."
             )
 
         case defs.CommandType.ERROR:
@@ -477,6 +488,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('address', show_address))
     application.add_handler(CommandHandler('fund', fund))
     application.add_handler(CommandHandler('balance', show_balance))
+    application.add_handler(CommandHandler('help', show_help))
     application.add_handler(CommandHandler('send', send_money))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
