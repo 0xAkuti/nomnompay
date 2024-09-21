@@ -434,6 +434,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None:
         logging.error(f"Invalid update object, missing message: {update}")
         return
+    # Check if it's a group chat
+    if update.effective_chat.type in ['group', 'supergroup']:
+        # Only process messages containing 'send', 'transfer', or 'split'
+        if not any(keyword in update.message.text.lower() for keyword in ['send', 'transfer', 'split']):
+            return  # Exit the function if none of the keywords are present
     
     await update.effective_chat.send_action(telegram.constants.ChatAction.TYPING)
 
