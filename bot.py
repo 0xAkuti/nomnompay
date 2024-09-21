@@ -43,6 +43,15 @@ USDC_TOKEN_IDS = {
     "MATIC": '',
 }
 
+CHAIN_IDS = {
+    "ETH-SEPOLIA": 11155111,
+    "ARB-SEPOLIA": 421614,
+    "MATIC-AMOY": 80002,
+    "ETH": 1,
+    "ARB": 42161,
+    "MATIC": 137,
+}
+
 def get_user_usdc_balance(user: defs.User) -> float:
     balances = circle_api.get_wallet_balance(user.wallet.id)['data']
     for token in balances['tokenBalances']:
@@ -79,6 +88,29 @@ def compose_transfer_money_message(transactions: list[defs.Transaction]):
         output.append(' '.join(message_parts))
     
     return '\n'.join(output)
+
+def create_payment_request(user: defs.User, amount: float | None = None) -> str:
+    # Create payment request according to https://eips.ethereum.org/EIPS/eip-681
+    
+    # Get the USDC token address for the user's blockchain
+    token_address = USDC_TOKEN_ADDRESSES.get(user.wallet.blockchain.value)
+    if not token_address:
+        raise ValueError(f"USDC token address not found for blockchain: {user.wallet.blockchain.value}")
+
+    chain_id = CHAIN_IDS.get(user.wallet.blockchain.value)
+    if not chain_id:
+        raise ValueError(f"Chain ID not found for blockchain: {user.wallet.blockchain.value}")
+
+    # Create the EIP-681 URL
+    eip681_url = f"ethereum:pay-{token_address}@{chain_id}/transfer?address={user.wallet.address}"
+    
+    if amount:
+        # USDC has 6 decimal places
+        amount = int(amount * 1e6)
+        eip681_url += f"&uint256={amount}"
+
+    print(eip681_url)
+    return eip681_url
 
 class CallbackDataEntry:
     def __init__(self, telegram_id:int, data: Any):
@@ -216,10 +248,49 @@ async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # commands
 
-async def show_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
     
-    user = defs.User.load_by_id(user_id)
+    user = defs.User.load_by_id(update.effective_user.id)    
+    
+    if user is None:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please /start the bot first.")
+        return
+    
+    try:
+        amount = float(context.args[0])
+    except (ValueError, IndexError):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Please provide a valid amount to fund your wallet.")
+        return
+    
+    eip681_url = create_payment_request(user, amount)
+
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(eip681_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    bio = io.BytesIO()
+    img.save(bio, 'PNG')
+    bio.seek(0)
+    
+    metamask_deep_link = f"https://metamask.app.link/send/{eip681_url}"
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=bio,
+        caption=f"Scan this QR code with your mobile wallet to fund your wallet with {format_amount(amount)} USDC.\n\n<a href='{metamask_deep_link}'>Or click here to send directly via MetaMask</a>",
+        parse_mode=telegram.constants.ParseMode.HTML
+    )
+
+async def show_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
+    
+    user = defs.User.load_by_id(update.effective_user.id)
     
     if user is None:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please /start the bot first.")
@@ -419,6 +490,7 @@ if __name__ == '__main__':
     
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('address', show_address))
+    application.add_handler(CommandHandler('fund', fund))
     application.add_handler(CommandHandler('balance', show_balance))
     application.add_handler(CommandHandler('send', send_money))
     application.add_handler(CallbackQueryHandler(button_click))
