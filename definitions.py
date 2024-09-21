@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 import requests
+import pathlib
 import circle.web3.developer_controlled_wallets
 
 Wallet = circle.web3.developer_controlled_wallets.SCAWallet
@@ -27,7 +28,54 @@ class Blockchain(str, Enum):
     MATIC = "MATIC"
     MATIC_AMOY = "MATIC-AMOY"
 
-class User(BaseModel):
+class CommandType(str, Enum):
+    TRANSFER_MONEY = "transfer_money"
+    SHOW_BALANCE = "show_balance"
+    SHOW_ADDRESS = "show_address"
+    HELP = "help"
+    UNKNOWN_COMMAND = "unknown_command"
+    ERROR = "error"
+
+class RecipientType(str, Enum):
+    USERNAME = "username"
+    ADDRESS = "address"
+    ENS = "ens"
+
+class CurrencyType(str, Enum):
+    TOKEN = "token"
+    FIAT = "fiat"
+
+class Network(str, Enum):
+    DEFAULT = "default"
+    MAINNET = "mainnet"
+    TESTNET = "testnet"
+
+class Transaction(BaseModel):
+    amount: float = Field(description="The amount of currency or equivalent_currency to be transferred")
+    currency: str = Field(description="The type of currency being transferred")
+    recipient: str = Field(description="The recipient of the transaction, can be a username, address, or ENS name")
+    recipient_type: RecipientType = Field(description="The type of recipient")
+    network: str = Field(description="The network on which the transaction is to be executed")
+    currency_type: CurrencyType = Field(description="The type of currency, such as token or fiat")
+    equivalent_currency: Optional[str] = Field(description="The currency in which the amount is denominated if different from the currency being transferred")
+    
+    def get_amount_usd(self, exchange_rates: dict[str, float]) -> float:
+        if self.currency_type is CurrencyType.FIAT:
+            return self.amount / exchange_rates[self.currency]
+        return self.amount
+    
+    def get_recipient_address(self):
+        if self.recipient_type is RecipientType.USERNAME:
+            return self.recipient
+        elif self.recipient_type is RecipientType.ADDRESS:
+            return self.recipient
+        elif self.recipient_type is RecipientType.ENS: # TODO add for non .eth ens names
+            return requests.get(f'https://api.ensdata.net/{self.recipient}').json().get('address')
+
+class BotCommand(BaseModel):
+    type: CommandType = Field(..., description="The type of bot command")
+    transactions: Optional[List[Transaction]] = Field(None, description="List of transactions (only for transfer_money type)")
+
 class StoreableBaseModel(BaseModel):
     def save(self, path: str):
         store_json_as_model(path, self)
