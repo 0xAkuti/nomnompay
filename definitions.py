@@ -10,6 +10,7 @@ import circle.web3.developer_controlled_wallets
 Wallet = circle.web3.developer_controlled_wallets.SCAWallet
 
 T = TypeVar('T', bound=BaseModel)
+DECIMALS = 6
 
 def load_json_as_model(path: str, model: Type[T]) -> T:
     with open(path, 'r') as file:
@@ -61,8 +62,10 @@ class Transaction(BaseModel):
     
     def get_amount_usd(self, exchange_rates: dict[str, float]) -> float:
         if self.currency_type is CurrencyType.FIAT:
-            return self.amount / exchange_rates[self.currency]
-        return self.amount
+            if self.equivalent_currency is None:
+                raise ValueError("equivalent_currency is required for fiat currency")
+            return round(self.amount / exchange_rates[self.equivalent_currency], DECIMALS)
+        return round(self.amount, DECIMALS)
     
     def get_recipient_address(self):
         if self.recipient_type is RecipientType.USERNAME:
