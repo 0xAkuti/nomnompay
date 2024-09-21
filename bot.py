@@ -5,6 +5,7 @@ import pathlib
 import dotenv
 import qrcode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import telegram
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import uuid
 import circle_api
@@ -17,6 +18,19 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+def get_user_usdc_balance(user: defs.User) -> float:
+    balances = circle_api.get_wallet_balance(user.wallet.id)['data']
+    for token in balances['tokenBalances']:
+        if token['token']['symbol'] == 'USDC':
+            return float(token['amount'])
+    return 0.0
+
+def format_amount(amount: float) -> str:
+    amount = float(amount)
+    if amount.is_integer() or (amount * 100).is_integer():
+        return f'{amount:,.0f}'
+    return f'{amount:,.2f}'
 
 class CallbackDataEntry:
     def __init__(self, telegram_id:int, data:dict):
@@ -127,6 +141,26 @@ async def show_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=bio, caption=f"Scan this QR code or use this address to fund your wallet:\n\n{user.wallet.address}\n\nOnly send USDC to this address on {user.pretty_print_blockchain()}.")
 
+async def show_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
+    
+    user_id = update.effective_user.id
+    
+    user = defs.User.load_by_id(user_id)
+    if user is None:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please start the bot first.")
+        return
+    
+    usdc_balance = get_user_usdc_balance(user)
+    
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, 
+        text=f"You currently have <b>{format_amount(usdc_balance)} USDC</b> in your wallet.",
+        parse_mode=telegram.constants.ParseMode.HTML
+    )
+
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
@@ -140,6 +174,7 @@ if __name__ == '__main__':
     
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('address', show_address))
+    application.add_handler(CommandHandler('balance', show_balance))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
     application.run_polling()
