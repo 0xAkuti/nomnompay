@@ -1,28 +1,17 @@
+import io
 import os
 import logging
+import pathlib
 import dotenv
+import qrcode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import uuid
 import circle_api
-import json
-from typing import Type, TypeVar
-from pydantic import BaseModel
 import definitions as defs
 import circle_api
 
 dotenv.load_dotenv()
-
-T = TypeVar('T', bound=BaseModel)
-
-def load_json_as_model(path: str, model: Type[T]) -> T:
-    with open(path, 'r') as file:
-        data = json.load(file)
-    return model.parse_obj(data)
-
-def store_json_as_model(path: str, model: BaseModel):
-    with open(path, 'w') as file:
-        file.write(model.json())
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -50,11 +39,11 @@ CALLBACK_DATA = CallBackData()
 
 def get_unregistered_wallet(blockchain: defs.Blockchain) -> defs.Wallet | None:
     fresh_wallets_path = f'data/wallets/{blockchain.value}.json'
-    wallets = load_json_as_model(fresh_wallets_path, defs.Wallets)
+    wallets = defs.Wallets.load(fresh_wallets_path)
     for i, wallet in enumerate(wallets.wallets):
         if wallet.ref_id is None:
             wallet = wallets.wallets.pop(i)
-            store_json_as_model(fresh_wallets_path, wallets)
+            wallets.save(fresh_wallets_path)
             return wallet
     return None
 
@@ -63,10 +52,7 @@ def get_unregistered_wallet(blockchain: defs.Blockchain) -> defs.Wallet | None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    try:
-        user = load_json_as_model(f'data/users/{user_id}.json', defs.User)
-    except FileNotFoundError:
-        user = None
+    user = defs.User.load_by_id(user_id)
     
     if user is not None:
         await update.message.reply_text(f"Welcome back {update.effective_user.first_name}! You already have a wallet.")
@@ -95,23 +81,52 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if command == 'create_wallet':
         await query_create_wallet(update, context)
 
+# queries
 
 async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if pathlib.Path(f'data/users/{update.effective_user.id}.json').exists():
+        await update.message.reply_text(f"Welcome back {update.effective_user.first_name}! You already have a wallet.")
+        return
+
     query = update.callback_query
     
     blockchain = defs.Blockchain(query.data.split(':')[1])
     wallet = get_unregistered_wallet(blockchain)
     if wallet is None:
         await query.edit_message_text("No wallets available to create.")
+        # TODO batch generate new wallets if none is available
         return
     
     user = defs.User(telegram_id=update.effective_user.id, username=update.effective_user.username, wallet=wallet)
     circle_api.update_wallet(wallet.id, user.username, str(user.telegram_id))
     # TODO fech wallet after update
     
-    store_json_as_model(f'data/users/{user.telegram_id}.json', user)
+    user.save(f'data/users/{user.telegram_id}.json')
     
     await query.edit_message_text(f"Wallet created successfully. {wallet.address}")
+
+# commands
+
+async def show_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    user = defs.User.load_by_id(user_id)
+    
+    if user is None:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please /start the bot first.")
+        return
+
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(user.wallet.address)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    bio = io.BytesIO()
+    img.save(bio, 'PNG')
+    bio.seek(0)
+
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=bio, caption=f"Scan this QR code or use this address to fund your wallet:\n\n{user.wallet.address}\n\nOnly send USDC to this address on {user.pretty_print_blockchain()}.")
+
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
@@ -124,6 +139,7 @@ if __name__ == '__main__':
     application = ApplicationBuilder().token(bot_token).build()
     
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('address', show_address))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
     application.run_polling()
