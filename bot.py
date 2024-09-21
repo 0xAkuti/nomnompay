@@ -14,6 +14,10 @@ import definitions as defs
 import circle_api
 import requests
 import txt2command
+import server
+import threading
+
+from utils import format_amount, get_ens_address
 
 dotenv.load_dotenv()
 
@@ -51,22 +55,6 @@ CHAIN_IDS = {
     "ARB": 42161,
     "MATIC": 137,
 }
-
-def get_user_usdc_balance(user: defs.User) -> float:
-    balances = circle_api.get_wallet_balance(user.wallet.id)['data']
-    for token in balances['tokenBalances']:
-        if token['token']['symbol'] == 'USDC':
-            return float(token['amount'])
-    return 0.0
-
-def format_amount(amount: float) -> str:
-    amount = float(amount)
-    if amount.is_integer():
-        return f'{amount:,.0f}'
-    return f'{amount:,.2f}'
-
-def get_ens_address(ens_name: str) -> str | None:
-    return requests.get(f'https://api.ensdata.net/{ens_name}').json().get('address')
 
 def compose_transfer_money_message(transactions: list[defs.Transaction]):
     if len(transactions) == 0:
@@ -319,7 +307,7 @@ async def show_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please start the bot first.")
         return
     
-    usdc_balance = get_user_usdc_balance(user)
+    usdc_balance = circle_api.get_user_usdc_balance(user)
     
     await context.bot.send_message(
         chat_id=update.effective_chat.id, 
@@ -337,6 +325,11 @@ async def send_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = defs.User.load_by_id(user_id)
     if user is None:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please start the bot first.")
+        return
+    
+    
+    if len(context.args) != 2:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Please provide a recipient username and amount to send. Example: /send @{user.username} 6.50")
         return
     
     # /send @username amount
@@ -382,7 +375,7 @@ async def internal_send_money(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     total_amount = sum(transaction.get_amount_usd(USD_EXCHANGE_RATES) for transaction in transactions)
-    if total_amount <= 0 or total_amount > get_user_usdc_balance(user):
+    if total_amount <= 0 or total_amount > circle_api.get_user_usdc_balance(user):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have enough money in your account. Check your /balance and top up.")
         return
     
@@ -413,8 +406,18 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
     transaction_ids = []
     for transaction in transactions:
         recipient_address = defs.User.load_by_username(transaction.recipient).wallet.address
-        response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], transaction.get_amount_usd(USD_EXCHANGE_RATES))
+        internal_transaction_id = str(uuid.uuid4())
+        response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], transaction.get_amount_usd(USD_EXCHANGE_RATES), internal_transaction_id)
         transaction_ids.append(response['data']['id'])
+        defs.CircleTransaction(
+            id=response['data']['id'],
+            user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id,
+            state=response['data']['state'],
+            transfer_type=defs.TransferType.SINGLE_CHAIN,
+            transaction=transaction
+        ).save(f'data/transactions/{internal_transaction_id}.json')
     
     await update.callback_query.edit_message_text(f"{update.callback_query.message.text_html}\n\n✅ Money sent successfully!", parse_mode=telegram.constants.ParseMode.HTML)
     # TODO transaction are initiated, but not completed yet, add check and update message if transaction is completed
@@ -496,4 +499,8 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
+    
+    server.bot_application = application
+    threading.Thread(target=server.app.run, kwargs={'port': 5000}).start()
+
     application.run_polling()
