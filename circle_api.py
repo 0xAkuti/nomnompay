@@ -125,14 +125,14 @@ def get_transaction(transaction_id: str):
     response = requests.get(url, headers=headers)
     return response.json()["data"]["transaction"]
 
-def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_signature: str, abi_parameters: list, amount: float | None = None):
+def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_signature: str, abi_parameters: list, amount: float | None = None, ref_id: str | None = None):
     url = "https://api.circle.com/v1/w3s/developer/transactions/contractExecution"
 
     payload = {
         "walletId": wallet_id,
         "contractAddress": contract_address,
         "abiFunctionSignature": abi_function_signature,
-        "abiParameters": abi_parameters,
+        "abiParameters": [str(param) for param in abi_parameters],
         "idempotencyKey": str(uuid.uuid4()),
         "entitySecretCiphertext": generate_entity_secret_ciphertext(),
         "feeLevel": "MEDIUM"
@@ -140,6 +140,9 @@ def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_s
 
     if amount is not None:
         payload["amount"] = str(amount * 1e18) # 18 decimals for ETH
+        
+    if ref_id is not None:
+        payload["refId"] = ref_id
 
     headers = {
         "accept": "application/json",
@@ -157,7 +160,8 @@ def encode_address(address: str) -> str:
     address_bytes = bytes.fromhex(address)
     return '0x' + (b'\x00' * 12 + address_bytes).hex()
 
-def cttp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float):
+def cttp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
+    # TODO looks like we need to wait for the transaction 1 before sending transaction 2 otherwise cricle will reject it
     amount_str = str(round(amount * 1e6))
     chain = user.wallet.blockchain.value
     print(chain)
@@ -166,9 +170,23 @@ def cttp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_a
     abi_function_signature = "depositForBurn(uint256,uint32,bytes32,address)"
     encoded_destination_address = encode_address(destination_address)    
     abi_parameters = [amount_str, CCTP_DOMAINS[destination_chain.value], encoded_destination_address, USDC_TOKEN_ADDRESSES[chain]]    
-    response2 = execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters)
+    response2 = execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
     
     return response1, response2
+
+
+def cttp_burn_step_1(user: defs.User, amount: float, ref_id: str):
+    amount_str = str(round(amount * 1e6))
+    chain = user.wallet.blockchain.value
+    return execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CTTP_TOKEN_MESSENGER[chain], amount_str], ref_id=ref_id)
+
+def cttp_burn_step_2(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
+    amount_str = str(round(amount * 1e6))
+    chain = user.wallet.blockchain.value
+    abi_function_signature = "depositForBurn(uint256,uint32,bytes32,address)"
+    encoded_destination_address = encode_address(destination_address)    
+    abi_parameters = [amount_str, CCTP_DOMAINS[destination_chain.value], encoded_destination_address, USDC_TOKEN_ADDRESSES[chain]]    
+    return execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
 
 def get_message_bytes_and_hash(blockchain: defs.Blockchain, tx_hash: str) -> tuple[str, str]:
     provider = web3.Web3(web3.HTTPProvider(INFURA_ENPOINTS[blockchain.value]))
