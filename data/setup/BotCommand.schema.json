@@ -1,0 +1,88 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "BotCommand",
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "description": "The type of bot command",
+            "enum": [
+                "transfer_money",
+                "show_balance",
+                "show_address",
+                "help",
+                "unknown_command"
+            ]
+        },
+        "transactions": {
+            "type": "array",
+            "description": "List of transactions (only for transfer_money type)",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "number",
+                        "description": "The amount of currency or equivalent_currency to be transferred"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "The type of currency being transferred",
+                        "default": "USDC"
+                    },
+                    "recipient": {
+                        "type": "string",
+                        "description": "The recipient of the transaction, can be a username, address, or ENS name"
+                    },
+                    "recipient_type": {
+                        "type": "string",
+                        "description": "The type of recipient",
+                        "enum": [
+                            "username",
+                            "address",
+                            "ens"
+                        ]
+                    },
+                    "network": {
+                        "type": "string",
+                        "description": "The network on which the transaction is to be executed",
+                        "default": "default"
+                    },
+                    "currency_type": {
+                        "type": "string",
+                        "description": "The type of currency, such as token or fiat",
+                        "enum": [
+                            "token",
+                            "fiat"
+                        ]
+                    },
+                    "equivalent_currency": {
+                        "type": "string",
+                        "description": "The currency in which the amount is denominated if different from the currency being transferred",
+                        "default": null
+                    }
+                },
+                "required": [
+                    "amount",
+                    "recipient",
+                    "recipient_type",
+                    "currency_type"
+                ]
+            }
+        }
+    },
+    "required": [
+        "type"
+    ],
+    "if": {
+        "properties": {
+            "type": {
+                "const": "transfer_money"
+            }
+        }
+    },
+    "then": {
+        "required": [
+            "transactions"
+        ]
+    }
+}

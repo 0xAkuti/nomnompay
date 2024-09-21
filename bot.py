@@ -13,6 +13,8 @@ import circle_api
 import definitions as defs
 import circle_api
 import requests
+import txt2command
+
 dotenv.load_dotenv()
 
 logging.basicConfig(
@@ -358,6 +360,53 @@ async def internal_cancel_send(update: Update, context: ContextTypes.DEFAULT_TYP
     CALLBACK_DATA.get(callback_key) # to invalidate the confirm button
     await update.callback_query.edit_message_text(f"{update.callback_query.message.text_html}\n\n❌ Transaction cancelled.", parse_mode=telegram.constants.ParseMode.HTML)
 
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
+    if update.message is None:
+        logging.error(f"Invalid update object, missing message: {update}")
+        return
+    
+    await update.effective_chat.send_action(telegram.constants.ChatAction.TYPING)
+
+    bot_command = txt2command.parse_message(update.message.text or "")
+    print(bot_command.json(indent=4))
+
+    match bot_command.type:
+        case defs.CommandType.TRANSFER_MONEY:
+            if bot_command.transactions:
+                await internal_send_money(update, context, bot_command.transactions)
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Transfer command received, but no transaction details were provided."
+                )
+
+        case defs.CommandType.SHOW_BALANCE:
+            await show_balance(update, context)
+
+        case defs.CommandType.SHOW_ADDRESS:
+            await show_address(update, context)
+
+        case defs.CommandType.UNKNOWN_COMMAND:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="I'm sorry, I didn't understand that command. Can you please try again?"
+            )
+
+        case defs.CommandType.ERROR:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="An error occurred while processing your request. Please try again later."
+            )
+
+        case _:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Unexpected command type. Please try again."
+            )
+
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
 
@@ -373,5 +422,6 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('balance', show_balance))
     application.add_handler(CommandHandler('send', send_money))
     application.add_handler(CallbackQueryHandler(button_click))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
     application.run_polling()
