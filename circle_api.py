@@ -62,7 +62,14 @@ def get_wallet_balance(wallet_id: str):
     response = requests.get(url, headers=headers)
     return response.json()
 
-def send_transfer(wallet_id: str, recipient: str, tokenId: str, amount: float):
+def get_user_usdc_balance(user: defs.User) -> float:
+    balances = get_wallet_balance(user.wallet.id)['data']
+    for token in balances['tokenBalances']:
+        if token['token']['symbol'] == 'USDC':
+            return float(token['amount'])
+    return 0.0
+
+def send_transfer(wallet_id: str, recipient: str, tokenId: str, amount: float, ref_id: str):
     url = "https://api.circle.com/v1/w3s/developer/transactions/transfer"
 
     payload = {
@@ -72,7 +79,8 @@ def send_transfer(wallet_id: str, recipient: str, tokenId: str, amount: float):
         "amounts": [str(amount)],
         "idempotencyKey": str(uuid.uuid4()), # TODO create a uuid from the user request so that it can only be sent once
         "entitySecretCiphertext": client.generate_entity_secret_ciphertext(),
-        "feeLevel": "MEDIUM"
+        "feeLevel": "MEDIUM",
+        "refId": ref_id
     }
     headers = {
         "accept": "application/json",

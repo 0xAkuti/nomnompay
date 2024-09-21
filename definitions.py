@@ -21,6 +21,14 @@ def store_json_as_model(path: str, model: BaseModel):
     with open(path, 'w') as file:
         file.write(model.json())
 
+class StoreableBaseModel(BaseModel):
+    def save(self, path: str):
+        store_json_as_model(path, self)
+    
+    @classmethod
+    def load(cls, path: str):
+        return load_json_as_model(path, cls)
+
 class Blockchain(str, Enum):
     ETH = "ETH"
     ETH_SEPOLIA = "ETH-SEPOLIA"
@@ -79,14 +87,6 @@ class BotCommand(BaseModel):
     type: CommandType = Field(..., description="The type of bot command")
     transactions: Optional[List[Transaction]] = Field(None, description="List of transactions (only for transfer_money type)")
 
-class StoreableBaseModel(BaseModel):
-    def save(self, path: str):
-        store_json_as_model(path, self)
-    
-    @classmethod
-    def load(cls, path: str):
-        return load_json_as_model(path, cls)
-
 class User(StoreableBaseModel):
     telegram_id: int = Field(..., description="The user's telegram ID")
     username: str = Field(..., description="The user's telegram username")
@@ -107,6 +107,22 @@ class User(StoreableBaseModel):
         for path in pathlib.Path('data/users').glob('*.json'):
             user = cls.load(str(path))
             if user.username == username:
+                return user
+        return None
+    
+    @classmethod
+    def load_by_wallet_id(cls, wallet_id: str) -> 'User | None':
+        for path in pathlib.Path('data/users').glob('*.json'):
+            user = cls.load(str(path))
+            if user and user.wallet.id == wallet_id:
+                return user
+        return None
+
+    @classmethod
+    def load_by_wallet_address(cls, wallet_address: str) -> 'User | None':
+        for path in pathlib.Path('data/users').glob('*.json'):
+            user = cls.load(str(path))
+            if user and user.wallet.address == wallet_address:
                 return user
         return None
 
@@ -133,3 +149,15 @@ class User(StoreableBaseModel):
 class Wallets(StoreableBaseModel):
     wallets: List[Wallet] = Field(..., description="The list of wallets")
 
+class TransferType(str, Enum):
+    SINGLE_CHAIN = "SINGLE-CHAIN"
+    CROSS_CHAIN = "CROSS-CHAIN"
+    
+class CircleTransaction(StoreableBaseModel):
+    id: str = Field(..., description="The ID of the transaction")
+    state: str = Field(..., description="The state of the transaction")
+    user_id: int = Field(..., description="The ID of the user who initiated the transaction")
+    chat_id: int = Field(..., description="The ID of the chat where the transaction was initiated")
+    message_id: int = Field(..., description="The ID of the message in the user's chat where the transaction was initiated")
+    transfer_type: TransferType = Field(..., description="The type of transfer")
+    transaction: Transaction
