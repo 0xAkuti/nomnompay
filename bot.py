@@ -413,12 +413,15 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
         usd_amount = transaction.get_amount_usd(USD_EXCHANGE_RATES)
         # descide between single and cross chain transfer
         response = ''
+        message = ''
         if user.wallet.blockchain == destination_chain:
             transfer_type = defs.TransferType.SINGLE_CHAIN
             response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], usd_amount, internal_transaction_id)
+            message = 'Money sent successfully!'
         else:
             transfer_type = defs.TransferType.CROSS_CHAIN
-            response = circle_api.cttp_burn_step_1(user, usd_amount, f'{internal_transaction_id}:approve')
+            response = circle_api.cctp_burn_step_1(user, usd_amount, f'{internal_transaction_id}:approve')
+            message = 'Money sent successfully! (This is a cross chain transfer and takes 15 minutes to complete.)'
             print('Cross chain transfer initiated')
         
         # transaction_ids.append(response['data']['id'])
@@ -432,7 +435,7 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
             transaction=transaction
         ).save(f'data/transactions/{internal_transaction_id}.json')
     
-    await update.callback_query.edit_message_text(f"{update.callback_query.message.text_html}\n\n✅ Money sent successfully!", parse_mode=telegram.constants.ParseMode.HTML)
+    await update.callback_query.edit_message_text(f"{update.callback_query.message.text_html}\n\n✅ {message}", parse_mode=telegram.constants.ParseMode.HTML)
     # TODO transaction are initiated, but not completed yet, add check and update message if transaction is completed
     # TODO add webhook that informs users about incoming transfers
     # TODO handle cross chain transfer
