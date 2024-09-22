@@ -552,7 +552,7 @@ async def request_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("❌", callback_data=f'cancel_send:{callback_key}'), InlineKeyboardButton("✅", callback_data=f'confirm_send:{callback_key}')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    request_message = f"{requester.username} is requesting {format_amount(amount)} USDC from you."
+    request_message = f"@{requester.username} is requesting {format_amount(amount)} USDC from you."
     if optional_message:
         request_message += f"\n\nMessage: {optional_message}"
     request_message += "\n\nDo you want to send the payment?"
