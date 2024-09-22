@@ -3,7 +3,7 @@ import enum
 import dotenv
 import os
 import requests
-
+import asyncio
 import definitions as defs
 from constants import *
 
@@ -132,7 +132,7 @@ def execute_smart_contract(wallet_id: str, contract_address: str, abi_function_s
         "walletId": wallet_id,
         "contractAddress": contract_address,
         "abiFunctionSignature": abi_function_signature,
-        "abiParameters": [str(param) for param in abi_parameters],
+        "abiParameters": abi_parameters,
         "idempotencyKey": str(uuid.uuid4()),
         "entitySecretCiphertext": generate_entity_secret_ciphertext(),
         "feeLevel": "MEDIUM"
@@ -224,6 +224,7 @@ def cttp_mint(source_chain: defs.Blockchain, destination_walled_id: str, destina
     contract_address = CTTP_MESSAGE_TRANSMITTER[destination_chain.value]
     message_bytes, message_hash = get_message_bytes_and_hash(source_chain, tx_hash)
     attestation = get_atttestation(message_hash)
+    print("Attestation received")
     abi_function_signature = "receiveMessage(bytes,bytes)"
     abi_parameters = [message_bytes, attestation]
     return execute_smart_contract(destination_walled_id, contract_address, abi_function_signature, abi_parameters)

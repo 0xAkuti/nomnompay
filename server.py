@@ -3,6 +3,7 @@ import telegram
 from telegram.ext import Application
 import json
 import asyncio
+import circle_api
 import definitions as defs
 import requests
 from constants import *
@@ -60,6 +61,27 @@ async def handle_inbound_transaction(notification):
             print(f"User not found for wallet ID: {wallet_id}")
 
 async def handle_outbound_transaction(notification):
-    ...
+    if notification['state'] != 'COMPLETE':
+        return
+    if not notification['refId']:
+        return
+    if notification['refId'].endswith(':approve'):
+        transaction = defs.CircleTransaction.load(f"data/transactions/{notification['refId'].replace(':approve', '')}.json")
+        print("Received approval, now burning")
+        user = defs.User.load_by_id(transaction.user_id)
+        recipient = defs.User.load_by_username(transaction.transaction.recipient)
+        
+        response = circle_api.cttp_burn_step_2(user, recipient.wallet.blockchain, recipient.wallet.address, transaction.transaction.amount, notification['refId'].replace('approve', 'burn'))
+        print(response)
+    elif notification['refId'].endswith(':burn'):
+        transaction = defs.CircleTransaction.load(f"data/transactions/{notification['refId'].replace(':burn', '')}.json")
+        # print(f"Minting on destination chain {recipient.wallet.blockchain}")
+        user = defs.User.load_by_id(transaction.user_id)
+        recipient = defs.User.load_by_username(transaction.transaction.recipient)
+        bot_application.job_queue.run_once(circle_api.cttp_mint, when=datetime.timedelta(minutes=15), job_kwargs={
+            'source_chain':user.wallet.blockchain, 'destination_walled_id': recipient.wallet.id, 'destination_chain': recipient.wallet.blockchain, 'notification': notification['txHash']})
+        # Add delayed job so that the attestation has time to be confirmed
+        # response = circle_api.cttp_mint(user.wallet.blockchain, recipient.wallet.id, recipient.wallet.blockchain, notification['txHash'])
+
 if __name__ == '__main__':
     app.run(port=5000)  # Run on port 5000
