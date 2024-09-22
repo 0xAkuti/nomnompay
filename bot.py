@@ -17,6 +17,7 @@ import txt2command
 import server
 import threading
 from constants import *
+import json
 
 from utils import format_amount, get_ens_address
 
@@ -394,8 +395,12 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
 
     transaction_ids = []
     for transaction in transactions:
+        destination_chain = user.wallet.blockchain
         if transaction.recipient_type == defs.RecipientType.USERNAME:
-            recipient_address = defs.User.load_by_username(transaction.recipient).wallet.address
+            recipient = defs.User.load_by_username(transaction.recipient)
+            recipient_address = recipient.wallet.address
+            if recipient.wallet.blockchain != user.wallet.blockchain:
+                destination_chain = recipient.wallet.blockchain
         elif transaction.recipient_type == defs.RecipientType.ENS:
             recipient_address = get_ens_address(transaction.recipient)
             if recipient_address is None:
@@ -404,15 +409,26 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             recipient_address = transaction.recipient
         internal_transaction_id = str(uuid.uuid4())
-        response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], transaction.get_amount_usd(USD_EXCHANGE_RATES), internal_transaction_id)
-        transaction_ids.append(response['data']['id'])
+        
+        usd_amount = transaction.get_amount_usd(USD_EXCHANGE_RATES)
+        # descide between single and cross chain transfer
+        response = ''
+        if user.wallet.blockchain == destination_chain:
+            transfer_type = defs.TransferType.SINGLE_CHAIN
+            response = circle_api.send_transfer(user.wallet.id, recipient_address, USDC_TOKEN_IDS[user.wallet.blockchain.value], usd_amount, internal_transaction_id)
+        else:
+            transfer_type = defs.TransferType.CROSS_CHAIN
+            response = circle_api.cttp_burn_step_1(user, usd_amount, f'{internal_transaction_id}:approve')
+            print('Cross chain transfer initiated')
+        
+        # transaction_ids.append(response['data']['id'])
         defs.CircleTransaction(
             id=response['data']['id'],
             user_id=update.effective_user.id,
             chat_id=update.effective_chat.id,
             message_id=update.effective_message.message_id,
             state=response['data']['state'],
-            transfer_type=defs.TransferType.SINGLE_CHAIN,
+            transfer_type=transfer_type,
             transaction=transaction
         ).save(f'data/transactions/{internal_transaction_id}.json')
     
@@ -420,6 +436,8 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
     # TODO transaction are initiated, but not completed yet, add check and update message if transaction is completed
     # TODO add webhook that informs users about incoming transfers
     # TODO handle cross chain transfer
+
+
 
 async def internal_cancel_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query is None:
