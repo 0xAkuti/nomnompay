@@ -160,33 +160,33 @@ def encode_address(address: str) -> str:
     address_bytes = bytes.fromhex(address)
     return '0x' + (b'\x00' * 12 + address_bytes).hex()
 
-def cttp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
+def cctp_burn(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
     # TODO looks like we need to wait for the transaction 1 before sending transaction 2 otherwise cricle will reject it
     amount_str = str(round(amount * 1e6))
     chain = user.wallet.blockchain.value
     print(chain)
-    response1 = execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CTTP_TOKEN_MESSENGER[chain], amount_str])
+    response1 = execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CCTP_TOKEN_MESSENGER[chain], amount_str])
     
     abi_function_signature = "depositForBurn(uint256,uint32,bytes32,address)"
     encoded_destination_address = encode_address(destination_address)    
     abi_parameters = [amount_str, CCTP_DOMAINS[destination_chain.value], encoded_destination_address, USDC_TOKEN_ADDRESSES[chain]]    
-    response2 = execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
+    response2 = execute_smart_contract(user.wallet.id, CCTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
     
     return response1, response2
 
 
-def cttp_burn_step_1(user: defs.User, amount: float, ref_id: str):
+def cctp_burn_step_1(user: defs.User, amount: float, ref_id: str):
     amount_str = str(round(amount * 1e6))
     chain = user.wallet.blockchain.value
-    return execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CTTP_TOKEN_MESSENGER[chain], amount_str], ref_id=ref_id)
+    return execute_smart_contract(user.wallet.id, USDC_TOKEN_ADDRESSES[chain], "approve(address,uint256)", [CCTP_TOKEN_MESSENGER[chain], amount_str], ref_id=ref_id)
 
-def cttp_burn_step_2(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
+def cctp_burn_step_2(user: defs.User, destination_chain: defs.Blockchain, destination_address: str, amount: float, ref_id: str):
     amount_str = str(round(amount * 1e6))
     chain = user.wallet.blockchain.value
     abi_function_signature = "depositForBurn(uint256,uint32,bytes32,address)"
     encoded_destination_address = encode_address(destination_address)    
     abi_parameters = [amount_str, CCTP_DOMAINS[destination_chain.value], encoded_destination_address, USDC_TOKEN_ADDRESSES[chain]]    
-    return execute_smart_contract(user.wallet.id, CTTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
+    return execute_smart_contract(user.wallet.id, CCTP_TOKEN_MESSENGER[chain], abi_function_signature, abi_parameters, ref_id=ref_id)
 
 def get_message_bytes_and_hash(blockchain: defs.Blockchain, tx_hash: str) -> tuple[str, str]:
     provider = web3.Web3(web3.HTTPProvider(INFURA_ENPOINTS[blockchain.value]))
@@ -220,8 +220,8 @@ def get_atttestation(message_hash: str) -> str | None:
         return None
     return response['attestation']
 
-def cttp_mint(source_chain: defs.Blockchain, destination_walled_id: str, destination_chain: defs.Blockchain, tx_hash: str):
-    contract_address = CTTP_MESSAGE_TRANSMITTER[destination_chain.value]
+def cctp_mint(source_chain: defs.Blockchain, destination_walled_id: str, destination_chain: defs.Blockchain, tx_hash: str):
+    contract_address = CCTP_MESSAGE_TRANSMITTER[destination_chain.value]
     message_bytes, message_hash = get_message_bytes_and_hash(source_chain, tx_hash)
     attestation = get_atttestation(message_hash)
     print("Attestation received")
