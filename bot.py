@@ -295,6 +295,10 @@ This bot supports currency conversions, all major languages and responds in Engl
 
 Payment within a group:
 To use the payment bot in a group, create your telegram group and add NomNomPaybot as admin. Text recipient's telegram handle to send payment e.g. "pay my roomie @bob $12". You can also split a bill by asking the bot to "split 150k vnd between @alice, @bob and @charlotte". Don't forget to try our Nouns sticker pack to add a splash of fun, e.g. type an emoji like 🍕 or 🚕to show the Nouns stickers
+
+Request payment:
+You can request a payment from another user by using the /request command, e.g. /request @username 10.50 [optional message]
+This will send a payment request to the specified user for the given amount in USDC, along with an optional message if provided.
 """)
 
 async def send_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -482,6 +486,75 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
 
+async def request_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None or update.effective_user is None:
+        logging.error(f"Invalid update object, missing effective chat or user: {update}")
+        return
+    
+    user_id = update.effective_user.id
+    
+    requester = defs.User.load_by_id(user_id)
+    if requester is None:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please start the bot first.")
+        return
+    
+    if len(context.args) < 2:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Please provide a recipient username and amount to request. Example: /request @username 6.50 [optional message]")
+        return
+    
+    recipient, amount, *message_parts = context.args
+    try:
+        amount = float(amount)
+    except ValueError:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Please provide a valid amount.")
+        return
+
+    optional_message = " ".join(message_parts) if message_parts else ""
+
+    recipient_user = defs.User.load_by_username(recipient.lstrip('@'))
+    if recipient_user is None:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"{recipient} does not have a wallet yet. Please ask them to start the bot and set one up first.")
+        return
+
+    transaction = defs.Transaction(
+        recipient=requester.username,
+        currency="USDC",
+        recipient_type=defs.RecipientType.USERNAME,
+        amount=amount,
+        currency_type=defs.CurrencyType.TOKEN,
+        network="default",
+        equivalent_currency=None
+    )
+
+    callback_key = CALLBACK_DATA.set(CallbackDataEntry(recipient_user.telegram_id, [transaction]))
+
+    keyboard = [[InlineKeyboardButton("❌", callback_data=f'cancel_send:{callback_key}'), InlineKeyboardButton("✅", callback_data=f'confirm_send:{callback_key}')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    request_message = f"{requester.username} is requesting {format_amount(amount)} USDC from you."
+    if optional_message:
+        request_message += f"\n\nMessage: {optional_message}"
+    request_message += "\n\nDo you want to send the payment?"
+
+    try:
+        await context.bot.send_message(
+            chat_id=recipient_user.telegram_id, 
+            text=request_message, 
+            reply_markup=reply_markup
+        )
+        confirmation_message = f"Payment request for {format_amount(amount)} USDC has been sent to {recipient}."
+        if optional_message:
+            confirmation_message += f"\nIncluded message: {optional_message}"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=confirmation_message
+        )
+    except telegram.error.Forbidden:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Unable to send payment request to {recipient}. They may have blocked the bot or never interacted with it."
+        )
+
 if __name__ == '__main__':
     bot_token = os.getenv('BOT_TOKEN')
     if not bot_token:
@@ -495,6 +568,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('balance', show_balance))
     application.add_handler(CommandHandler('help', show_help))
     application.add_handler(CommandHandler('send', send_money))
+    application.add_handler(CommandHandler('request', request_payment))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
