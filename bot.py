@@ -175,6 +175,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif command == 'cancel_send':
         await internal_cancel_send(update, context)
 
+
 # queries
 
 async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,6 +201,8 @@ async def query_create_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     user = defs.User(telegram_id=update.effective_user.id, username=update.effective_user.username or "", wallet=wallet)
     circle_api.update_wallet(wallet.id, user.username, str(user.telegram_id))
+    
+    circle_api.request_from_faucet(user)
     # TODO fech wallet after update
     
     user.save(f'data/users/{user.telegram_id}.json')
