@@ -228,3 +228,19 @@ def cctp_mint(source_chain: defs.Blockchain, destination_walled_id: str, destina
     abi_function_signature = "receiveMessage(bytes,bytes)"
     abi_parameters = [message_bytes, attestation]
     return execute_smart_contract(destination_walled_id, contract_address, abi_function_signature, abi_parameters)
+
+def request_from_faucet(user: defs.User):
+    url = "https://api.circle.com/v1/faucet/drips"
+
+    payload = {
+        "address": user.wallet.address,
+        "blockchain": user.wallet.blockchain.value,
+        "native": True,
+        "usdc": True
+    }
+    headers = {
+        "Authorization": f"Bearer {CIRCLE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    requests.request("post", url, json=payload, headers=headers)
