@@ -1,0 +1,11 @@
+python-dotenv
+qrcode
+python-telegram-bot
+requests
+Pillow
+pycryptodome
+web3
+eth-abi
+pydantic
+openai
+flask
