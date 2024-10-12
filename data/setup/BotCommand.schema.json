@@ -10,8 +10,10 @@
                 "transfer_money",
                 "show_balance",
                 "show_address",
+                "request",
                 "help",
-                "unknown_command"
+                "unknown_command",
+                "error"
             ]
         },
         "transactions": {
@@ -68,6 +70,39 @@
                     "currency_type"
                 ]
             }
+        },
+        "request": {
+            "type": "object",
+            "description": "A request to be sent to the target user (only for request type)",
+            "properties": {
+                "target_username": {
+                    "type": "string",
+                    "description": "The username of the user to request from"
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "The amount of currency to request"
+                },
+                "currency": {
+                    "type": "string",
+                    "description": "The type of currency to request",
+                    "default": "USDC"
+                },
+                "equivalent_currency": {
+                    "type": "string",
+                    "description": "The currency in which the amount is denominated if different from the currency being transferred",
+                    "default": null
+                },
+                "message": {
+                    "type": "string",
+                    "description": "An optional message to include in the request"
+                }
+            },
+            "required": [
+                "target_username",
+                "amount",
+                "currency"
+            ]
         }
     },
     "required": [
@@ -84,5 +119,19 @@
         "required": [
             "transactions"
         ]
+    },
+    "else": {
+        "if": {
+            "properties": {
+                "type": {
+                    "const": "request"
+                }
+            }
+        },
+        "then": {
+            "required": [
+                "request"
+            ]
+        }
     }
 }
