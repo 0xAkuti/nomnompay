@@ -39,6 +39,7 @@ class CommandType(str, Enum):
     TRANSFER_MONEY = "transfer_money"
     SHOW_BALANCE = "show_balance"
     SHOW_ADDRESS = "show_address"
+    REQUEST = "request"
     HELP = "help"
     UNKNOWN_COMMAND = "unknown_command"
     ERROR = "error"
@@ -81,9 +82,22 @@ class Transaction(BaseModel):
         elif self.recipient_type is RecipientType.ENS: # TODO add for non .eth ens names
             return requests.get(f'https://api.ensdata.net/{self.recipient}').json().get('address')
 
+class Request(BaseModel):
+    target_username: str = Field(description="The username of the user to request from")
+    amount: float = Field(description="The amount of currency to request")
+    currency: str = Field(description="The type of currency to request")
+    equivalent_currency: Optional[str] = Field(description="The currency in which the amount is denominated if different from the currency being transferred")
+    message: Optional[str] = Field(description="An optional message to include in the request")
+    
+    def get_amount_usd(self, exchange_rates: dict[str, float]) -> float:
+        if self.equivalent_currency:
+            return round(self.amount / exchange_rates[self.equivalent_currency], DECIMALS)
+        return round(self.amount, DECIMALS)
+
 class BotCommand(BaseModel):
     type: CommandType = Field(..., description="The type of bot command")
     transactions: Optional[List[Transaction]] = Field(None, description="List of transactions (only for transfer_money type)")
+    request: Optional[Request] = Field(None, description="A request to be sent to the target user")
 
 class CustodyType(str, Enum):
     DEVELOPER = 'DEVELOPER'
