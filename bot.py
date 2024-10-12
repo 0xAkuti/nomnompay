@@ -395,6 +395,11 @@ async def internal_confirm_send(update: Update, context: ContextTypes.DEFAULT_TY
     if user is None: # should never happen
         await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have a wallet yet. Please start the bot first.")
         return
+    total_amount = sum(transaction.get_amount_usd(USD_EXCHANGE_RATES) for transaction in transactions)
+    if total_amount <= 0 or total_amount > circle_api.get_user_usdc_balance(user):
+        message = "You don't have enough money in your account. Check your /balance and top up."
+        await update.callback_query.edit_message_text(f"{update.callback_query.message.text_html}\n\n❌ {message}", parse_mode=telegram.constants.ParseMode.HTML)
+        return
 
     transaction_ids = []
     for transaction in transactions:
